@@ -33,19 +33,19 @@ struct circ_buff {
 
     friend void swap<T>(circ_buff &a, circ_buff &b) noexcept;
 
-    circ_buff() : buffer(nullptr), head_(0), tail_(0), capacity(0) {
+    circ_buff() : head_(0), tail_(0), capacity(0), buffer(nullptr) {
     }
 
     ~circ_buff() {
-        for (auto& x : *this) {
+        for (auto &x : *this) {
             x.~T();
         }
-        void* p = (void *)buffer;
-        operator delete (p);
+        void *p = (void *) buffer;
+        operator delete(p);
     }
 
     void clear() {
-        for (auto& x : *this) {
+        for (auto &x : *this) {
             x.~T();
         }
         tail_ = 0;
@@ -139,12 +139,12 @@ struct circ_buff {
     iterator insert(const_iterator pos, T const &value) {
         if (dist(head_, pos - begin()) + 1 < dist(pos - begin(), tail_)) {
             push_front(value);
-            for (size_t i = 0; i < pos - begin(); i++) {
+            for (size_t i = 0; i + begin() < pos; i++) {
                 std::swap(operator[](i), operator[](i + 1));
             }
         } else {
             push_back(value);
-            for (size_t i = size() - 1; i > pos - begin(); i--) {
+            for (size_t i = size() - 1; i + begin() > pos; i--) {
                 std::swap(operator[](i), operator[](i - 1));
             }
         }
@@ -231,27 +231,27 @@ private:
                     new(&new_buff[j++]) T(buffer[i]);
                 }
             }
-            for (auto& x: *this) {
+            for (auto &x: *this) {
                 x.~T();
             }
             tail_ = size();
             head_ = 0;
             capacity = new_capacity;
-            void* p = (void *)buffer;
-            operator delete (p);
+            void *p = (void *) buffer;
+            operator delete(p);
             buffer = new_buff;
         } catch (const std::exception &e) {
             for (size_t i = 0; i < j; i++) {
                 new_buff[i].~T();
             }
-            void* p = (void *)new_buff;
-            operator delete (p);
+            void *p = (void *) new_buff;
+            operator delete(p);
         }
     }
 
-    size_t head_ = 0;
-    size_t tail_ = 0;
-    size_t capacity = 0;
+    size_t head_;
+    size_t tail_;
+    size_t capacity;
 
     T *buffer;
 };
@@ -277,7 +277,7 @@ public:
     template<typename V>
     Iterator(Iterator<V> const &other,
              typename std::enable_if<std::is_same<V const, U>::value && std::is_const<U>::value>::type * = nullptr)
-            :buffer(other.buffer), ind(other.ind), head_(other.head_), tail_(other.tail_), capacity(other.capacity) {
+            :buffer(other.buffer), head_(other.head_), tail_(other.tail_), capacity(other.capacity), ind(other.ind) {
 
     }
 
@@ -362,8 +362,9 @@ public:
     friend ptrdiff_t operator-(Iterator<X> const &a, Iterator<Y> const &b);
 
 private:
-    Iterator(U *buffer, size_t head, size_t tail, size_t capacity, size_t ind) : buffer(buffer), capacity(capacity),
-                                                                                 head_(head), tail_(tail), ind(ind) {}
+    Iterator(U *buffer, size_t head, size_t tail, size_t capacity, size_t ind) : buffer(buffer),
+                                                                                 head_(head), tail_(tail),
+                                                                                 capacity(capacity), ind(ind) {}
 
     U *buffer;
     size_t head_;
@@ -430,4 +431,5 @@ template<typename X, typename Y>
 ptrdiff_t operator-(Iterator<X> const &a, Iterator<Y> const &b) {
     return a.ind - b.ind;
 }
+
 #endif //CIRCULAR_BUFFER_CIRCULAR_BUFFER_H
