@@ -34,8 +34,8 @@ struct circ_buff {
     friend void swap<T>(circ_buff &a, circ_buff &b) noexcept;
 
     circ_buff() {
+        buffer = static_cast<T *>(operator new[](sizeof(T) * 2));
         capacity = 2;
-        buffer = static_cast<T *>(operator new[](sizeof(T) * capacity));
     }
 
     ~circ_buff() {
@@ -272,7 +272,7 @@ public:
     }
 
     Iterator operator++(int) {
-        Iterator tmp(buffer, ind);
+        Iterator tmp(buffer, head_, tail_, capacity, ind);
         ++(*this);
         return tmp;
     }
