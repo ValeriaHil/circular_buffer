@@ -33,9 +33,7 @@ struct circ_buff {
 
     friend void swap<T>(circ_buff &a, circ_buff &b) noexcept;
 
-    circ_buff() {
-        buffer = static_cast<T *>(operator new[](sizeof(T) * 2));
-        capacity = 2;
+    circ_buff() : buffer(nullptr), head_(0), tail_(0), capacity(0) {
     }
 
     ~circ_buff() {
@@ -207,7 +205,7 @@ private:
         if (capacity - size() > 1) {
             return;
         }
-        size_t new_capacity = capacity * 2;
+        size_t new_capacity = (capacity == 0) ? 2 : capacity * 2;
         T *new_buff = static_cast<T *>(operator new[](sizeof(T) * new_capacity));
 
         if (tail_ > head_) {
