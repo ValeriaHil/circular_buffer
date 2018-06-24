@@ -277,7 +277,7 @@ public:
     template<typename V>
     Iterator(Iterator<V> const &other,
              typename std::enable_if<std::is_same<V const, U>::value && std::is_const<U>::value>::type * = nullptr)
-            :buffer(other.buffer), ind(other.ind) {
+            :buffer(other.buffer), ind(other.ind), head_(other.head_), tail_(other.tail_), capacity(other.capacity) {
 
     }
 
@@ -399,7 +399,7 @@ Iterator<U> operator-(Iterator<U> a, ptrdiff_t n) {
 template<typename X, typename Y>
 bool operator==(Iterator<X> const &a, Iterator<Y> const &b) {
     return a.buffer == b.buffer && a.ind == b.ind;
-};
+}
 
 template<typename X, typename Y>
 bool operator!=(Iterator<X> const &a, Iterator<Y> const &b) {
@@ -409,25 +409,25 @@ bool operator!=(Iterator<X> const &a, Iterator<Y> const &b) {
 template<typename X, typename Y>
 bool operator<(Iterator<X> const &a, Iterator<Y> const &b) {
     return a.ind < b.ind;
-};
+}
 
 template<typename X, typename Y>
 bool operator<=(Iterator<X> const &a, Iterator<Y> const &b) {
     return a.ind <= b.ind;
-};
+}
 
 template<typename X, typename Y>
 bool operator>(Iterator<X> const &a, Iterator<Y> const &b) {
     return a.ind > b.ind;
-};
+}
 
 template<typename X, typename Y>
 bool operator>=(Iterator<X> const &a, Iterator<Y> const &b) {
     return a.ind >= b.ind;
-};
+}
 
 template<typename X, typename Y>
 ptrdiff_t operator-(Iterator<X> const &a, Iterator<Y> const &b) {
     return a.ind - b.ind;
-};
+}
 #endif //CIRCULAR_BUFFER_CIRCULAR_BUFFER_H
