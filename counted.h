@@ -17,6 +17,27 @@ struct counted
 private:
     int data;
 
+    friend bool operator==(counted const& a, counted const& b);
+    friend bool operator!=(counted const& a, counted const& b);
+    friend bool operator<(counted const& a, counted const& b);
+    friend bool operator<=(counted const& a, counted const& b);
+    friend bool operator>(counted const& a, counted const& b);
+    friend bool operator>=(counted const& a, counted const& b);
+
+    friend bool operator==(counted const& a, int b);
+    friend bool operator!=(counted const& a, int b);
+    friend bool operator<(counted const& a, int b);
+    friend bool operator<=(counted const& a, int b);
+    friend bool operator>(counted const& a, int b);
+    friend bool operator>=(counted const& a, int b);
+
+    friend bool operator==(int a, counted const& b);
+    friend bool operator!=(int a, counted const& b);
+    friend bool operator<(int a, counted const& b);
+    friend bool operator<=(int a, counted const& b);
+    friend bool operator>(int a, counted const& b);
+    friend bool operator>=(int a, counted const& b);
+
     static std::set<counted const*> instances;
 };
 

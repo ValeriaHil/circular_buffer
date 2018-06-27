@@ -5,6 +5,17 @@
 
 using container = circ_buff<counted>;
 
+#include "gtest/gtest.h"
+
+#include "fault_injection.h"
+
+/*template <typename T>
+T const& as_const(T& obj)
+{
+    return obj;
+}*/
+using std::as_const;
+
 template<typename C, typename T>
 void mass_push_back(C &c, std::initializer_list<T> elems) {
     for (T const &e : elems)
@@ -19,17 +30,36 @@ void mass_push_front(C &c, std::initializer_list<T> elems) {
 
 template<typename It, typename T>
 void expect_eq(It i1, It e1, std::initializer_list<T> elems) {
-    auto i2 = elems.begin(), e2 = elems.end();
+    std::vector<typename std::remove_const<typename std::iterator_traits<It>::value_type>::type> vals;
 
-    for (;;) {
-        if (i1 == e1 || i2 == e2) {
-            EXPECT_TRUE(i1 == e1 && i2 == e2);
-            break;
+    for (; i1 != e1; ++i1)
+        vals.push_back(*i1);
+
+    if (!std::equal(vals.begin(), vals.end(), elems.begin(), elems.end())) {
+        std::stringstream ss;
+        ss << '{';
+
+        bool add_comma = false;
+        for (auto const &e : vals) {
+            if (add_comma)
+                ss << ", ";
+            ss << e;
+            add_comma = true;
         }
 
-        EXPECT_EQ(*i2, *i1);
-        ++i1;
-        ++i2;
+        ss << "} != {";
+
+        add_comma = false;
+        for (auto const &e : elems) {
+            if (add_comma)
+                ss << ", ";
+            ss << e;
+            add_comma = true;
+        }
+
+        ss << "}";
+
+        ADD_FAILURE() << ss.str();
     }
 }
 
@@ -43,79 +73,23 @@ void expect_reverse_eq(C const &c, std::initializer_list<T> elems) {
     expect_eq(c.rbegin(), c.rend(), elems);
 }
 
-TEST(correctness, default_ctor) {
-    counted::no_new_instances_guard g;
-
-    container c;
-    g.expect_no_instances();
-}
-
-TEST(correctness, end_iterator) {
-    counted::no_new_instances_guard g;
-
-    container c;
-    container::iterator i = c.end();
-
-    EXPECT_EQ(c.begin(), i);
-}
-
-
-TEST(correctness, back_front) {
-    counted::no_new_instances_guard g;
-
-    container c;
-//    mass_push_back(c, {1, 2});
-    c.push_back(1);
-    c.push_back(2);
-    auto x = c.front();
-    EXPECT_EQ(1, c.front());
-    //EXPECT_EQ(1, std::as_const(c).front());
-    //EXPECT_EQ(2, c.back());
-    //EXPECT_EQ(2, std::as_const(c).back());
-}
-
-TEST(correctness, back_front_ref) {
-    counted::no_new_instances_guard g;
-
-    container c;
-    mass_push_back(c, {1, 2, 3, 4, 5});
-    c.front() = 6;
-    c.back() = 7;
-    expect_eq(c, {6, 2, 3, 4, 7});
-}
-
-TEST(correctness, back_front_cref) {
-    counted::no_new_instances_guard g;
-
-    container c;
-    mass_push_back(c, {1, 2, 3, 4, 5});
-    EXPECT_TRUE(&c.front() == &std::as_const(c).front());
-    EXPECT_TRUE(&c.back() == &std::as_const(c).back());
-}
-
-void magic(counted &c) {
-    c = 42;
-}
-
-void magic(counted const &c) {}
-
-TEST(correctness, back_front_ncref) {
-    counted::no_new_instances_guard g;
-
-    container c;
-    mass_push_back(c, {1, 2, 3, 4, 5});
-    magic(std::as_const(c).front());
-    magic(std::as_const(c).back());
-
-    expect_eq(c, {1, 2, 3, 4, 5});
-}
-
 TEST(correctness, push_back) {
     counted::no_new_instances_guard g;
 
     container c;
     mass_push_back(c, {1, 2, 3, 4});
     expect_eq(c, {1, 2, 3, 4});
+}
+
+TEST(correctness, back_front) {
+    counted::no_new_instances_guard g;
+
+    container c;
+    mass_push_back(c, {1, 2, 3, 4, 5});
+    EXPECT_EQ(1, c.front());
+    EXPECT_EQ(1, as_const(c).front());
+    EXPECT_EQ(5, c.back());
+    EXPECT_EQ(5, as_const(c).back());
 }
 
 TEST(correctness, copy_ctor) {
@@ -125,6 +99,15 @@ TEST(correctness, copy_ctor) {
     mass_push_back(c, {1, 2, 3, 4});
     container c2 = c;
     expect_eq(c2, {1, 2, 3, 4});
+}
+
+TEST(correctness, copy_ctor_2) {
+    counted::no_new_instances_guard g;
+
+    container c;
+    mass_push_front(c, {1, 2, 3, 4, 5});
+    container c2 = c;
+    expect_eq(c2, {5, 4, 3, 2, 1});
 }
 
 TEST(correctness, copy_ctor_empty) {
@@ -192,6 +175,34 @@ TEST(correctness, empty) {
     EXPECT_TRUE(c.empty());
 }
 
+TEST(correctness, queue) {
+    counted::no_new_instances_guard g;
+
+    container c;
+    mass_push_back(c, {1, 2, 3, 4, 5});
+
+    for (int i = 6; i != 100; ++i) {
+        c.push_back(i);
+        c.pop_front();
+    }
+
+    expect_eq(c, {95, 96, 97, 98, 99});
+}
+
+TEST(correctness, bogus_queue) {
+    counted::no_new_instances_guard g;
+
+    container c;
+    mass_push_back(c, {1, 2, 3, 4, 5});
+
+    for (int i = 6; i != 100; ++i) {
+        c.push_back(i);
+        c.erase(c.begin() + 1);
+    }
+
+    expect_eq(c, {1, 96, 97, 98, 99});
+}
+
 TEST(correctness, reverse_iterators) {
     counted::no_new_instances_guard g;
 
@@ -218,33 +229,6 @@ TEST(correctness, iterator_conversions) {
     EXPECT_FALSE(i1 != i2);
     EXPECT_FALSE(i2 != i1);
     EXPECT_FALSE(i2 != i2);
-
-    EXPECT_TRUE(std::as_const(i1) == i1);
-    EXPECT_TRUE(std::as_const(i1) == i2);
-    EXPECT_TRUE(std::as_const(i2) == i1);
-    EXPECT_TRUE(std::as_const(i2) == i2);
-    EXPECT_FALSE(std::as_const(i1) != i1);
-    EXPECT_FALSE(std::as_const(i1) != i2);
-    EXPECT_FALSE(std::as_const(i2) != i1);
-    EXPECT_FALSE(std::as_const(i2) != i2);
-
-    EXPECT_TRUE(i1 == std::as_const(i1));
-    EXPECT_TRUE(i1 == std::as_const(i2));
-    EXPECT_TRUE(i2 == std::as_const(i1));
-    EXPECT_TRUE(i2 == std::as_const(i2));
-    EXPECT_FALSE(i1 != std::as_const(i1));
-    EXPECT_FALSE(i1 != std::as_const(i2));
-    EXPECT_FALSE(i2 != std::as_const(i1));
-    EXPECT_FALSE(i2 != std::as_const(i2));
-
-    EXPECT_TRUE(std::as_const(i1) == std::as_const(i1));
-    EXPECT_TRUE(std::as_const(i1) == std::as_const(i2));
-    EXPECT_TRUE(std::as_const(i2) == std::as_const(i1));
-    EXPECT_TRUE(std::as_const(i2) == std::as_const(i2));
-    EXPECT_FALSE(std::as_const(i1) != std::as_const(i1));
-    EXPECT_FALSE(std::as_const(i1) != std::as_const(i2));
-    EXPECT_FALSE(std::as_const(i2) != std::as_const(i1));
-    EXPECT_FALSE(std::as_const(i2) != std::as_const(i2));
 }
 
 TEST(correctness, iterators_postfix) {
@@ -268,25 +252,13 @@ TEST(correctness, iterators_postfix) {
     EXPECT_EQ(s.end(), j);
 }
 
-TEST(correctness, const_iterators_postfix) {
+TEST(correctness, insert_empty) {
     counted::no_new_instances_guard g;
 
-    container s;
-    mass_push_back(s, {1, 2, 3});
-    container::const_iterator i = s.begin();
-    EXPECT_EQ(1, *i);
-    container::const_iterator j = i++;
-    EXPECT_EQ(2, *i);
-    EXPECT_EQ(1, *j);
-    j = i++;
-    EXPECT_EQ(3, *i);
-    EXPECT_EQ(2, *j);
-    j = i++;
-    EXPECT_TRUE(i == s.end());
-    EXPECT_EQ(3, *j);
-    j = i--;
-    EXPECT_EQ(3, *i);
-    EXPECT_TRUE(j == s.end());
+    container c;
+    c.insert(c.begin(), 5);
+    mass_push_back(c, {4, 3, 2, 1});
+    expect_eq(c, {5, 4, 3, 2, 1});
 }
 
 TEST(correctness, insert_begin) {
@@ -307,6 +279,15 @@ TEST(correctness, insert_middle) {
     expect_eq(c, {1, 2, 5, 3, 4});
 }
 
+TEST(correctness, insert_close_to_end) {
+    counted::no_new_instances_guard g;
+
+    container c;
+    mass_push_back(c, {1, 2, 3, 4, 5, 6});
+    c.insert(std::next(c.begin(), 4), 42);
+    expect_eq(c, {1, 2, 3, 4, 42, 5, 6});
+}
+
 TEST(correctness, insert_end) {
     counted::no_new_instances_guard g;
 
@@ -314,18 +295,6 @@ TEST(correctness, insert_end) {
     mass_push_back(c, {1, 2, 3, 4});
     c.insert(c.end(), 5);
     expect_eq(c, {1, 2, 3, 4, 5});
-}
-
-TEST(correctness, insert_return_value) {
-    counted::no_new_instances_guard g;
-
-    container c;
-    mass_push_back(c, {1, 2, 3, 4});
-
-    container::iterator i = c.insert(std::next(c.begin(), 2), 5);
-    EXPECT_EQ(5, *i);
-    EXPECT_EQ(2, *std::prev(i));
-    EXPECT_EQ(3, *std::next(i));
 }
 
 TEST(correctness, erase_begin) {
@@ -346,6 +315,15 @@ TEST(correctness, erase_middle) {
     expect_eq(c, {1, 2, 4});
 }
 
+TEST(correctness, erase_close_to_end) {
+    counted::no_new_instances_guard g;
+
+    container c;
+    mass_push_back(c, {1, 2, 3, 4, 5, 6});
+    c.erase(std::next(c.begin(), 4));
+    expect_eq(c, {1, 2, 3, 4, 6});
+}
+
 TEST(correctness, erase_end) {
     counted::no_new_instances_guard g;
 
@@ -355,15 +333,40 @@ TEST(correctness, erase_end) {
     expect_eq(c, {1, 2, 3});
 }
 
-TEST(correctness, erase_return_value) {
+TEST(correctness, subscript) {
     counted::no_new_instances_guard g;
 
     container c;
     mass_push_back(c, {1, 2, 3, 4});
-    container::iterator i = c.erase(std::next(c.begin()));
-    EXPECT_EQ(3, *i);
-    i = c.erase(i);
-    EXPECT_EQ(4, *i);
+    c.erase(c.begin() + 2);
+    c.pop_front();
+    EXPECT_EQ(2, c[0]);
+    EXPECT_EQ(4, c[1]);
+    EXPECT_EQ(2, as_const(c)[0]);
+    EXPECT_EQ(4, as_const(c)[1]);
+}
+
+TEST(correctness, size) {
+    counted::no_new_instances_guard g;
+
+    container c;
+    for (size_t i = 0; i != 10; ++i) {
+        EXPECT_EQ(i, c.size());
+        c.push_back(42);
+    }
+    EXPECT_EQ(10u, c.size());
+}
+
+TEST(correctness, clear) {
+    counted::no_new_instances_guard g;
+
+    container c;
+    mass_push_back(c, {1, 2, 3, 4, 5, 6});
+    EXPECT_EQ(6u, c.size());
+    c.clear();
+    EXPECT_EQ(0u, c.size());
+    EXPECT_TRUE(c.empty());
+    EXPECT_EQ(c.end(), c.begin());
 }
 
 TEST(correctness, swap) {
@@ -412,256 +415,162 @@ TEST(correctness, swap_empty_self) {
     swap(c1, c1);
 }
 
-TEST(correctness, clear_empty) {
+
+TEST(correctness, swap_iterator_validity) {
     counted::no_new_instances_guard g;
 
-    container c;
-    c.clear();
-    EXPECT_TRUE(c.empty());
-    c.clear();
-    EXPECT_TRUE(c.empty());
-    c.clear();
-    EXPECT_TRUE(c.empty());
+    container c1, c2;
+    mass_push_back(c1, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    c2.push_back(11);
+
+    container::const_iterator c1_begin = c1.begin();
+    container::const_iterator c1_end = c1.end();
+
+    container::const_iterator c2_begin = c2.begin();
+    container::const_iterator c2_end = c2.end();
+
+    swap(c1, c2);
+
+    EXPECT_EQ(1, *c1_begin++);
+    EXPECT_EQ(2, *c1_begin++);
+    EXPECT_EQ(3, *c1_begin++);
+    c1_begin += 7;
+    EXPECT_EQ(c1_end, c1_begin);
+
+    EXPECT_EQ(11, *c2_begin++);
+    EXPECT_EQ(c2_end, c2_begin);
 }
 
-TEST(correctness, clear) {
-    counted::no_new_instances_guard g;
 
-    container c;
-    mass_push_back(c, {1, 2, 3, 4});
-    c.clear();
-    EXPECT_TRUE(c.empty());
-    EXPECT_EQ(c.begin(), c.end());
-    mass_push_back(c, {5, 6, 7, 8});
-    expect_eq(c, {5, 6, 7, 8});
+TEST(fault_injection, non_throwing_default_ctor) {
+    faulty_run([] {
+        try {
+            container();
+        }
+        catch (...) {
+            fault_injection_disable dg;
+            ADD_FAILURE() << "default constructor throws";
+            throw;
+        }
+    });
 }
 
+TEST(fault_injection, push_back_1) {
+    faulty_run([] {
+        container c;
+        c.push_back(1);
+        c.push_back(2);
+        c.push_back(3);
+        fault_injection_disable dg;
+        expect_eq(c, {1, 2, 3});
+    });
+}
 
+TEST(fault_injection, copy_ctor) {
+    faulty_run([] {
+        container c;
+        mass_push_back(c, {1, 2, 3, 4});
+        container c2 = c;
+        fault_injection_disable dg;
+        expect_eq(c, {1, 2, 3, 4});
+        expect_eq(c2, {1, 2, 3, 4});
+    });
+}
 
+TEST(fault_injection, non_throwing_clear) {
+    faulty_run([] {
+        container c;
+        mass_push_back(c, {1, 2, 3, 4});
+        try {
+            c.clear();
+        }
+        catch (...) {
+            fault_injection_disable dg;
+            ADD_FAILURE() << "clear throws";
+            throw;
+        }
+    });
+}
 
+TEST(fault_injection, assignment_operator) {
+    faulty_run([] {
+        container c;
+        mass_push_back(c, {1, 2, 3, 4});
+        container c2;
+        mass_push_back(c2, {5, 6, 7, 8});
 
+        try {
+            c = c2;
+        }
+        catch (...) {
+            fault_injection_disable dg;
+            expect_eq(c, {1, 2, 3, 4});
+            throw;
+        }
 
+        fault_injection_disable dg;
+        expect_eq(c, {5, 6, 7, 8});
+    });
+}
 
+TEST(fault_injection, push_back_2) {
+    faulty_run([] {
+        container c;
+        mass_push_back(c, {1, 2, 3, 4});
 
+        try {
+            c.push_back(5);
+        }
+        catch (...) {
+            fault_injection_disable dg;
+            expect_eq(c, {1, 2, 3, 4});
+            throw;
+        }
 
+        fault_injection_disable dg;
+        expect_eq(c, {1, 2, 3, 4, 5});
+    });
+}
 
+TEST(fault_injection, push_front) {
+    faulty_run([] {
+        container c;
+        mass_push_back(c, {1, 2, 3, 4});
 
+        try {
+            c.push_front(5);
+        }
+        catch (...) {
+            fault_injection_disable dg;
+            expect_eq(c, {1, 2, 3, 4});
+            throw;
+        }
 
-//TEST(correctness, test1_easy) {
-//    circ_buff<int> a;
-//    for (int i = 0; i < 100; i++) {
-//        a.push_back(i);
-//    }
-//
-//    bool wr = true;
-//    for (int i = 0; i < 100; i++) {
-//        if (a.front() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_front();
-//    }
-//    EXPECT_TRUE(wr);
-//}
-//
-//TEST(correctness, test1_hard) {
-//    circ_buff<int> a;
-//    for (int i = 0; i < 100000; i++) {
-//        a.push_back(i);
-//    }
-//
-//    bool wr = true;
-//    for (int i = 0; i < 100000; i++) {
-//        if (a.front() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_front();
-//    }
-//    EXPECT_TRUE(wr);
-//}
-//
-//TEST(correctness, test2_easy) {
-//    circ_buff<int> a;
-//    for (int i = 0; i < 100; i++) {
-//        a.push_back(i);
-//    }
-//
-//    bool wr = true;
-//    for (int i = 99; i >= 0; i--) {
-//        if (a.back() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_back();
-//    }
-//    EXPECT_TRUE(wr);
-//}
-//
-//TEST(correctness, test2_hard) {
-//    circ_buff<int> a;
-//    for (int i = 0; i < 100000; i++) {
-//        a.push_back(i);
-//    }
-//
-//    bool wr = true;
-//    for (int i = 99999; i >= 0; i--) {
-//        if (a.back() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_back();
-//    }
-//    EXPECT_TRUE(wr);
-//}
-//
-//TEST(correctness, test3_easy) {
-//    circ_buff<int> a;
-//    for (int i = 0; i < 100; i++) {
-//        a.push_back(i);
-//        a.push_front(i);
-//    }
-//
-//    bool wr = true;
-//    for (int i = 99; i >= 0; i--) {
-//        if (a.back() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_back();
-//        if (a.front() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_front();
-//    }
-//    EXPECT_TRUE(wr);
-//}
-//
-//TEST(correctness, test3_hard) {
-//    circ_buff<int> a;
-//    for (int i = 0; i < 100000; i++) {
-//        a.push_back(i);
-//        a.push_front(i);
-//    }
-//
-//    bool wr = true;
-//    for (int i = 99999; i >= 0; i--) {
-//        if (a.back() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_back();
-//        if (a.front() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_front();
-//    }
-//    EXPECT_TRUE(wr);
-//}
-//
-//TEST(correctness, erase_easy) {
-//    circ_buff<int> a;
-//    for (int i = 0; i < 100; i++) {
-//        a.push_back(i);
-//    }
-//
-//    bool wr = true;
-//    circ_buff<int>::const_iterator it = a.begin();
-//    it += 50;
-//    for (int i = 50; i < 60; i++) {
-//        a.erase(it);
-//    }
-//    for (int i = 0; i < 50; i++) {
-//        if (a.front() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_front();
-//    }
-//    for (int i = 60; i < 100; i++) {
-//        if (a.front() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_front();
-//    }
-//    EXPECT_TRUE(wr);
-//}
-//
-//TEST(correctness, erase_hard) {
-//    circ_buff<int> a;
-//    for (int i = 0; i < 10000; i++) {
-//        a.push_back(i);
-//    }
-//
-//    bool wr = true;
-//    circ_buff<int>::const_iterator it = a.begin();
-//    it += 5000;
-//    for (int i = 5000; i < 6000; i++) {
-//        a.erase(it);
-//    }
-//    for (int i = 0; i < 5000; i++) {
-//        if (a.front() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_front();
-//    }
-//    for (int i = 6000; i < 10000; i++) {
-//        if (a.front() != i) {
-//            wr = false;
-//            break;
-//        }
-//        a.pop_front();
-//    }
-//    EXPECT_TRUE(wr);
-//}
-//
-//TEST(correctness, insert_easy) {
-//    circ_buff<int> a;
-//    bool wr = true;
-//    for (int i = 0; i < 100; i++) {
-//        a.push_back(i);
-//    }
-//
-//    circ_buff<int>::const_iterator it = a.begin();
-//    for (int i = 0; i < 100; i++) {
-//        it = a.begin();
-//        it += i * 2;
-//        a.insert(it, i);
-//
-//    }
-//    for (int i = 0; i < 200; i++) {
-//        if (i / 2 != a.front()) {
-//            wr = false;
-//        }
-//        a.pop_front();
-//    }
-//    EXPECT_TRUE(wr);
-//}
+        fault_injection_disable dg;
+        expect_eq(c, {5, 1, 2, 3, 4});
+    });
+}
 
-//TEST(correctness, insert_hard) {
-//    circ_buff<int> a;
-//    bool wr = true;
-//    for (int i = 0; i < 10000; i++) {
-//        a.push_back(i);
-//    }
-//
-//    circ_buff<int>::iterator it = a.begin();
-//    for (int i = 0; i < 10000; i++) {
-//        it = a.begin();
-//        it += i * 2;
-//
-//        a.insert(circ_buff<int>::const_iterator(it), i);
-//
-//    }
-//    for (int i = 0; i < 20000; i++) {
-//        if (i / 2 != a.front()) {
-//            wr = false;
-//        }
-//        a.pop_front();
-//    }
-//    EXPECT_TRUE(wr);
-//}
+TEST(fault_injection, insert) {
+    faulty_run([] {
+        container c;
+        mass_push_back(c, {1, 2, 3, 4});
+
+        c.insert(c.begin() + 2, 5);
+
+        fault_injection_disable dg;
+        expect_eq(c, {1, 2, 5, 3, 4});
+    });
+}
+
+TEST(fault_injection, erase) {
+    faulty_run([] {
+        container c;
+        mass_push_back(c, {6, 3, 8, 2, 5, 7, 10});
+
+        c.erase(c.begin() + 4);
+
+        fault_injection_disable dg;
+        expect_eq(c, {6, 3, 8, 2, 7, 10});
+    });
+}//}

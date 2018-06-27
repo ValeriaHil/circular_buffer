@@ -80,21 +80,29 @@ struct circ_buff {
     }
 
     void push_back(T const &value) {
-        ensure_capacity();
-        new(&buffer[tail_]) T(value);
-        ++tail_;
-        tail_ %= capacity;
+        try {
+            ensure_capacity();
+            new(&buffer[tail_]) T(value);
+            ++tail_;
+            tail_ %= capacity;
+        } catch (const std::exception &e) {
+            throw e;
+        }
     }
 
     void push_front(T const &value) {
-        ensure_capacity();
-        size_t head_copy = (head_ == 0) ? (capacity - 1) : (head_ - 1);
-        new(&buffer[head_copy]) T(value);
-        head_ = head_copy;
+        try {
+            ensure_capacity();
+            size_t head_copy = (head_ == 0) ? (capacity - 1) : (head_ - 1);
+            new(&buffer[head_copy]) T(value);
+            head_ = head_copy;
+        } catch (const std::exception &e) {
+            throw e;
+        }
     }
 
     void pop_back() {
-        tail_ = tail_ == 0 ? (capacity - 1) : (tail_ - 1);
+        tail_ = (tail_ == 0) ? (capacity - 1) : (tail_ - 1);
         buffer[tail_].~T();
     }
 
@@ -215,20 +223,24 @@ private:
         if (capacity - size() > 1) {
             return;
         }
+
         size_t new_capacity = (capacity == 0) ? 2 : capacity * 2;
         T *new_buff = static_cast<T *>(operator new(sizeof(T) * new_capacity));
         size_t j = 0;
         try {
             if (tail_ > head_) {
                 for (size_t i = head_; i < tail_; i++) {
-                    new(&new_buff[j++]) T(buffer[i]);
+                    new(&new_buff[j]) T(buffer[i]);
+                    ++j;
                 }
             } else {
                 for (size_t i = head_; i < capacity; i++) {
-                    new(&new_buff[j++]) T(buffer[i]);
+                    new(&new_buff[j]) T(buffer[i]);
+                    ++j;
                 }
                 for (size_t i = 0; i < tail_; i++) {
-                    new(&new_buff[j++]) T(buffer[i]);
+                    new(&new_buff[j]) T(buffer[i]);
+                    ++j;
                 }
             }
             for (auto &x: *this) {
@@ -246,6 +258,7 @@ private:
             }
             void *p = (void *) new_buff;
             operator delete(p);
+            throw e;
         }
     }
 
