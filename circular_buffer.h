@@ -86,7 +86,7 @@ struct circ_buff {
             ++tail_;
             tail_ %= capacity;
         } catch (const std::exception &e) {
-            throw e;
+            throw;
         }
     }
 
@@ -97,7 +97,7 @@ struct circ_buff {
             new(&buffer[head_copy]) T(value);
             head_ = head_copy;
         } catch (const std::exception &e) {
-            throw e;
+            throw;
         }
     }
 
@@ -258,7 +258,7 @@ private:
             }
             void *p = (void *) new_buff;
             operator delete(p);
-            throw e;
+            throw;
         }
     }
 
@@ -291,7 +291,6 @@ public:
     Iterator(Iterator<V> const &other,
              typename std::enable_if<std::is_same<V const, U>::value && std::is_const<U>::value>::type * = nullptr)
             :buffer(other.buffer), head_(other.head_), tail_(other.tail_), capacity(other.capacity), ind(other.ind) {
-
     }
 
 //    template<typename W>
